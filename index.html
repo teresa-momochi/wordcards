@@ -1,0 +1,1256 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>圖卡抽卡 · 英文單字飄浮學習</title>
+<style>
+  :root{
+    --bg-0:#05050a;
+    --bg-1:#0a0a16;
+    --panel:#11111f;
+    --panel-2:#161628;
+    --line: rgba(255,255,255,0.08);
+    --line-2: rgba(255,255,255,0.14);
+    --gold:#f6c94b;
+    --gold-soft: rgba(246,201,75,0.35);
+    --purple:#7c6bf0;
+    --purple-2:#9d8cff;
+    --text-0:#f5f4f8;
+    --text-1:#b9b8c8;
+    --text-2:#82819a;
+    --radius-lg:20px;
+    --radius-md:14px;
+    --radius-sm:9px;
+    font-family: "Noto Sans TC","Segoe UI",system-ui,-apple-system,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg-0);color:var(--text-0);overflow-x:hidden;}
+  body{min-height:100vh;}
+
+  #stars{
+    position:fixed; inset:0; z-index:0; pointer-events:none;
+    background:
+      radial-gradient(circle at 12% 18%, rgba(255,255,255,0.9) 0 1px, transparent 1.5px) 0 0/180px 180px,
+      radial-gradient(circle at 70% 60%, rgba(255,255,255,0.7) 0 1px, transparent 1.5px) 0 0/220px 220px,
+      radial-gradient(circle at 40% 80%, rgba(255,255,255,0.6) 0 1px, transparent 1.5px) 0 0/260px 260px,
+      radial-gradient(ellipse at 50% -10%, rgba(124,107,240,0.25), transparent 60%),
+      radial-gradient(ellipse at 90% 110%, rgba(124,107,240,0.18), transparent 55%),
+      var(--bg-0);
+  }
+
+  .app{ position:relative; z-index:1; min-height:100vh; display:flex; flex-direction:column; }
+
+  /* ---------- top bar ---------- */
+  .topbar{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:18px 28px 10px;
+  }
+  .brand{ display:flex; align-items:center; gap:12px; }
+  .brand-icon{
+    width:42px; height:42px; border-radius:12px;
+    background:linear-gradient(135deg,var(--purple),#4b3fb0);
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 0 0 1px var(--line-2), 0 6px 16px rgba(124,107,240,0.35);
+  }
+  .brand-icon svg{width:22px;height:22px;}
+  .brand-text h1{ font-size:17px; font-weight:600; margin:0; letter-spacing:.3px; }
+  .brand-text p{ font-size:12.5px; color:var(--text-2); margin:2px 0 0; }
+
+  .top-actions{ display:flex; align-items:center; gap:10px; }
+  .star-pill{
+    display:flex; align-items:center; gap:6px;
+    background:var(--panel); border:1px solid var(--line-2);
+    padding:8px 14px; border-radius:999px; font-size:13px; color:var(--gold); font-weight:600;
+  }
+  .icon-btn{
+    display:flex; align-items:center; gap:6px;
+    background:var(--panel); border:1px solid var(--line-2); color:var(--text-1);
+    padding:8px 14px; border-radius:999px; font-size:13px; cursor:pointer;
+    transition:.15s; font-weight:500;
+  }
+  .icon-btn:hover{ background:var(--panel-2); color:var(--text-0); border-color:var(--gold-soft); }
+  .icon-btn.active{ color:var(--gold); border-color:var(--gold-soft); }
+
+  /* ---------- stage (spiral area) ---------- */
+  .stage{
+    position:relative;
+    height:46vh;
+    min-height:300px;
+    perspective:1400px;
+    margin-top:6px;
+  }
+  .stage-empty{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    color:var(--text-2); font-size:14px; text-align:center; flex-direction:column; gap:10px;
+  }
+  .stage-empty i{ font-size:30px; opacity:.5; }
+
+  .ribbon{
+    position:absolute; inset:0; pointer-events:none; opacity:.55;
+  }
+
+  .float-card{
+    position:absolute;
+    width:128px; height:160px;
+    border-radius:16px;
+    background:linear-gradient(160deg,#1b1b2f,#0e0e1b);
+    border:1px solid var(--line-2);
+    box-shadow:0 16px 32px rgba(0,0,0,0.55);
+    overflow:hidden;
+    cursor:pointer;
+    transform-style:preserve-3d;
+    transition:filter .25s, box-shadow .25s;
+    animation: drift 7s ease-in-out infinite;
+  }
+  .float-card:hover{ filter:brightness(1.15); }
+  .float-card.selected{
+    box-shadow:0 0 0 2px var(--gold), 0 0 30px var(--gold-soft), 0 16px 32px rgba(0,0,0,0.6);
+  }
+  .float-card .fc-img{
+    width:100%; height:70%; object-fit:cover; display:block;
+    filter:saturate(0.9) brightness(0.85);
+  }
+  .float-card .fc-img.placeholder{
+    display:flex; align-items:center; justify-content:center;
+    background:linear-gradient(160deg,#23233c,#16162a); color:var(--text-2); font-size:26px;
+  }
+  .float-card .fc-label{
+    position:absolute; left:0; right:0; bottom:0; height:30%;
+    display:flex; align-items:center; justify-content:center;
+    background:linear-gradient(0deg, rgba(0,0,0,0.75), rgba(0,0,0,0.15));
+    font-size:13px; font-weight:600; letter-spacing:.2px;
+    text-shadow:0 1px 6px rgba(0,0,0,0.6);
+  }
+
+  @keyframes drift{
+    0%,100%{ transform: translateY(0) rotate(var(--rot,0deg)); }
+    50%{ transform: translateY(-10px) rotate(calc(var(--rot,0deg) + 1deg)); }
+  }
+
+  /* ---------- hint panel ---------- */
+  .hint{
+    position:absolute; right:28px; top:14px;
+    background:var(--panel); border:1px solid var(--line-2);
+    border-radius:var(--radius-md); padding:12px 16px; max-width:200px;
+    font-size:12.5px; color:var(--text-1); display:flex; gap:10px; z-index:5;
+  }
+  .hint i{ color:var(--gold); font-size:18px; flex-shrink:0; margin-top:1px; }
+  .hint b{ display:block; color:var(--text-0); font-size:13px; margin-bottom:3px; }
+
+  /* ---------- deck strip + viewer ---------- */
+  .deck-section{ position:relative; flex:1; padding:0 0 18px; }
+
+  .deck-strip{
+    display:flex; align-items:center; justify-content:center;
+    gap:14px; padding:0 28px;
+    height:230px;
+    overflow:hidden;
+  }
+  .strip-card{
+    width:150px; height:200px; border-radius:16px; flex-shrink:0;
+    background:linear-gradient(160deg,#1b1b2f,#0e0e1b);
+    border:1px solid var(--line);
+    position:relative; overflow:hidden;
+    opacity:.45; filter:brightness(.6) saturate(.7);
+    transform:scale(.92);
+    transition:.2s;
+    cursor:pointer;
+  }
+  .strip-card.near{ opacity:.8; filter:brightness(.85); transform:scale(.97); }
+  .strip-card.center-active{ opacity:0; }
+  .strip-card img{ width:100%; height:75%; object-fit:cover; display:block; }
+  .strip-card .sc-placeholder{
+    width:100%; height:75%; display:flex; align-items:center; justify-content:center;
+    background:#1c1c30; color:var(--text-2); font-size:24px;
+  }
+  .strip-card .sc-label{
+    position:absolute; left:0; right:0; bottom:0; height:25%;
+    display:flex; align-items:center; justify-content:center;
+    font-size:13px; font-weight:600; color:var(--text-1);
+    background:rgba(0,0,0,0.3);
+  }
+
+  .viewer-wrap{
+    position:absolute; left:0; right:0; top:0;
+    display:flex; align-items:center; justify-content:center;
+    pointer-events:none;
+  }
+  .viewer-card{
+    pointer-events:auto;
+    width:min(494px, 92vw);
+    background:var(--panel);
+    border-radius:var(--radius-lg);
+    border:1px solid var(--gold-soft);
+    box-shadow:0 0 0 1px rgba(246,201,75,0.18), 0 30px 60px rgba(0,0,0,0.6);
+    animation: pop .28s cubic-bezier(.2,.9,.3,1.2);
+  }
+  @keyframes pop{ from{ opacity:0; transform:scale(.85) translateY(10px); } to{ opacity:1; transform:scale(1) translateY(0); } }
+
+  .viewer-imgwrap{
+    position:relative; width:100%; height:300px; background:#14141f;
+    border-radius:var(--radius-lg) var(--radius-lg) 0 0;
+    overflow:hidden;
+    box-shadow:0 0 0 2px var(--gold), 0 0 26px 6px rgba(246,201,75,0.5);
+  }
+  .viewer-imgwrap img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .viewer-imgwrap .vi-placeholder{
+    width:100%; height:100%; display:flex; align-items:center; justify-content:center;
+    color:var(--text-2); font-size:48px; background:linear-gradient(160deg,#23233c,#16162a);
+  }
+  .vi-speak{
+    position:absolute; left:14px; top:14px; width:38px; height:38px; border-radius:50%;
+    background:rgba(20,20,30,0.7); border:1px solid var(--line-2);
+    display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--text-0);
+    backdrop-filter:blur(4px); font-size:17px;
+  }
+  .vi-speak:hover{ background:rgba(124,107,240,0.4); }
+  .vi-close{
+    position:absolute; right:14px; top:14px; width:30px; height:30px; border-radius:50%;
+    background:rgba(20,20,30,0.7); border:1px solid var(--line-2);
+    display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--text-1);
+    font-size:15px;
+  }
+  .vi-close:hover{ background:rgba(255,255,255,0.15); color:var(--text-0); }
+
+  .viewer-body{ background:#f7f5ef; color:#1a1a22; padding:20px 22px 18px; border-radius:0 0 var(--radius-lg) var(--radius-lg); }
+  .vb-word{ font-size:25px; font-weight:700; margin:0 0 6px; color:#16161f; }
+  .vb-meta{ display:flex; align-items:center; gap:8px; margin-bottom:10px; flex-wrap:wrap; }
+  .vb-phon{ font-size:14px; color:#5a5a68; }
+  .vb-pos{
+    font-size:11.5px; background:#e9e6f8; color:#5a4bbf; padding:3px 9px; border-radius:999px; font-weight:600;
+  }
+  .vb-def{ font-size:14px; color:#3a3a46; line-height:1.65; margin:0 0 16px; }
+  .vb-actions{ display:flex; gap:10px; }
+  .vb-btn{
+    flex:1; display:flex; align-items:center; justify-content:center; gap:7px;
+    padding:11px 10px; border-radius:11px; font-size:13.5px; font-weight:600; cursor:pointer; border:none;
+  }
+  .vb-btn.primary{ background:var(--purple); color:#fff; }
+  .vb-btn.primary:hover{ background:#6a59e0; }
+  .vb-btn.ghost{ background:#fff; color:#1a1a22; border:1px solid #e2e0d8; }
+  .vb-btn.ghost.faved{ color:#b8860b; }
+  .vb-btn.ghost:hover{ background:#efedE3; }
+
+  .nav-arrow{
+    position:absolute; bottom:26px; width:38px; height:38px; border-radius:50%;
+    background:var(--panel); border:1px solid var(--line-2); color:var(--text-1);
+    display:flex; align-items:center; justify-content:center; cursor:pointer; z-index:6;
+  }
+  .nav-arrow:hover{ color:var(--text-0); border-color:var(--gold-soft); }
+  .nav-arrow.prev{ left:50%; transform:translateX(-90px); }
+  .nav-arrow.next{ left:50%; transform:translateX(52px); }
+  .nav-counter{
+    position:absolute; bottom:34px; left:50%; transform:translateX(-50%);
+    font-size:13px; color:var(--text-1); z-index:6; min-width:50px; text-align:center;
+  }
+
+  /* ---------- bottom bar ---------- */
+  .bottombar{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:14px 28px 20px;
+  }
+  .end-btn{
+    display:flex; align-items:center; gap:7px;
+    background:var(--panel); border:1px solid var(--line-2); color:var(--text-1);
+    padding:9px 16px; border-radius:999px; font-size:13px; cursor:pointer;
+  }
+  .end-btn:hover{ color:var(--text-0); border-color:var(--line-2); }
+  .progress-wrap{ display:flex; align-items:center; gap:10px; }
+  .progress-label{ font-size:12.5px; color:var(--text-2); }
+  .progress-track{ width:160px; height:6px; border-radius:999px; background:rgba(255,255,255,0.08); overflow:hidden; }
+  .progress-fill{ height:100%; background:linear-gradient(90deg,var(--purple),var(--gold)); transition:width .3s; }
+  .progress-pct{ font-size:12.5px; color:var(--text-0); font-weight:600; min-width:34px; }
+
+  /* ---------- list modal ---------- */
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(2,2,8,0.7); backdrop-filter:blur(3px);
+    display:flex; align-items:center; justify-content:center; z-index:50; padding:24px;
+  }
+  .modal-card{
+    background:var(--panel); border:1px solid var(--line-2); border-radius:var(--radius-lg);
+    width:100%; max-width:520px; max-height:80vh; overflow:hidden; display:flex; flex-direction:column;
+  }
+  .modal-head{ padding:18px 22px; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; }
+  .modal-head h3{ margin:0; font-size:16px; font-weight:600; }
+  .modal-head .icon-btn{ padding:6px 10px; }
+  .modal-list{ overflow-y:auto; padding:10px 14px; }
+  .modal-row{
+    display:flex; align-items:center; gap:12px; padding:10px 8px; border-radius:11px; cursor:pointer;
+  }
+  .modal-row:hover{ background:var(--panel-2); }
+  .modal-row img{ width:42px; height:42px; border-radius:9px; object-fit:cover; }
+  .modal-row .mr-ph{ width:42px; height:42px; border-radius:9px; background:#23233c; display:flex; align-items:center; justify-content:center; color:var(--text-2); }
+  .modal-row .mr-word{ font-size:14.5px; font-weight:600; color:var(--text-0); }
+  .modal-row .mr-def{ font-size:12px; color:var(--text-2); }
+  .modal-row .mr-idx{ font-size:11px; color:var(--text-2); margin-left:auto; }
+
+  /* ---------- teacher edit panel ---------- */
+  .edit-overlay{
+    position:fixed; inset:0; background:var(--bg-0); z-index:60; overflow-y:auto;
+  }
+  .edit-wrap{ max-width:840px; margin:0 auto; padding:28px 24px 80px; }
+  .edit-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+  .edit-head h2{ font-size:19px; margin:0; font-weight:600; }
+  .edit-sub{ color:var(--text-2); font-size:13px; margin:4px 0 22px; }
+
+  .edit-grid{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  @media (max-width:720px){ .edit-grid{ grid-template-columns:1fr; } }
+
+  .edit-card{
+    background:var(--panel); border:1px solid var(--line-2); border-radius:var(--radius-md);
+    padding:14px;
+  }
+  .ec-top{ display:flex; gap:12px; margin-bottom:10px; }
+  .ec-thumb{
+    width:64px; height:64px; border-radius:10px; flex-shrink:0; overflow:hidden;
+    background:#1c1c30; display:flex; align-items:center; justify-content:center; color:var(--text-2);
+    position:relative; cursor:pointer; border:1px dashed var(--line-2);
+  }
+  .ec-thumb img{ width:100%; height:100%; object-fit:cover; }
+  .ec-thumb input[type=file]{ position:absolute; inset:0; opacity:0; cursor:pointer; }
+  .ec-num{ font-size:11px; color:var(--text-2); margin-bottom:6px; display:block; }
+  .ec-fields{ flex:1; display:flex; flex-direction:column; gap:6px; }
+
+  .ec-input{
+    width:100%; background:var(--bg-1); border:1px solid var(--line); color:var(--text-0);
+    border-radius:8px; padding:7px 10px; font-size:13px; outline:none;
+  }
+  .ec-input:focus{ border-color:var(--purple-2); }
+  .ec-input.small{ font-size:12px; }
+  .ec-row2{ display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+  .ec-imgurl{ display:flex; gap:6px; margin-top:8px; }
+  .ec-imgurl input{ flex:1; }
+  .ec-clear{
+    background:none; border:none; color:var(--text-2); font-size:11.5px; cursor:pointer; text-decoration:underline;
+    padding:4px 0; align-self:flex-start;
+  }
+  .ec-clear:hover{ color:var(--text-0); }
+
+  .edit-footer{
+    position:sticky; bottom:0; display:flex; justify-content:flex-end; gap:10px;
+    padding:16px 0 4px; background:linear-gradient(0deg, var(--bg-0) 60%, transparent);
+  }
+  .btn{
+    padding:10px 20px; border-radius:999px; font-size:13.5px; font-weight:600; cursor:pointer; border:1px solid var(--line-2);
+    background:var(--panel); color:var(--text-1);
+  }
+  .btn:hover{ color:var(--text-0); }
+  .btn.primary{ background:var(--purple); border-color:var(--purple); color:#fff; }
+  .btn.primary:hover{ background:#6a59e0; }
+
+  .toast{
+    position:fixed; bottom:28px; left:50%; transform:translateX(-50%) translateY(20px);
+    background:#1c1c30; border:1px solid var(--line-2); color:var(--text-0);
+    padding:10px 20px; border-radius:999px; font-size:13px; z-index:99; opacity:0; pointer-events:none;
+    transition:.25s;
+  }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+  .sr-only{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0,0,0,0); }
+
+  .icon-svg{ width:1em; height:1em; display:inline-block; vertical-align:-2px; flex-shrink:0; }
+
+  .icon-btn.playing{ color:var(--gold); border-color:var(--gold-soft); background:rgba(246,201,75,0.12); }
+
+  .lesson-pill{
+    display:flex; align-items:center; gap:6px;
+    background:var(--panel); border:1px solid var(--line-2); color:var(--text-1);
+    padding:8px 14px; border-radius:999px; font-size:13px; cursor:pointer; font-weight:500;
+    max-width:160px;
+  }
+  .lesson-pill:hover{ background:var(--panel-2); color:var(--text-0); }
+  .lesson-pill .lp-name{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  #syncStatus{ font-size:11px; color:var(--text-2); margin-left:2px; }
+
+  .lesson-modal-body{ padding:14px 18px 18px; }
+  .lesson-name-row{ display:flex; gap:8px; margin-bottom:14px; }
+  .lesson-name-row input{ flex:1; }
+  .lesson-save-row{ display:flex; justify-content:space-between; gap:10px; margin-bottom:18px; }
+  .lesson-save-row .btn{ flex:1; white-space:nowrap; }
+  .lesson-list-title{ font-size:12.5px; color:var(--text-2); margin:0 0 8px; }
+  .lesson-row{
+    display:flex; align-items:center; gap:10px; padding:10px 8px; border-radius:11px; cursor:pointer;
+  }
+  .lesson-row:hover{ background:var(--panel-2); }
+  .lesson-row-icon{
+    width:38px; height:38px; border-radius:10px; background:var(--panel-2); flex-shrink:0;
+    display:flex; align-items:center; justify-content:center; color:var(--purple-2); font-size:16px;
+  }
+  .lesson-row-main{ flex:1; min-width:0; }
+  .lesson-row-name{ font-size:14px; font-weight:600; color:var(--text-0); }
+  .lesson-row-meta{ font-size:11.5px; color:var(--text-2); margin-top:2px; }
+  .lesson-row-del{
+    background:none; border:none; color:var(--text-2); cursor:pointer; padding:6px; border-radius:8px; flex-shrink:0;
+  }
+  .lesson-row-del:hover{ color:var(--gold); background:rgba(255,255,255,0.06); }
+  .lesson-empty{ padding:24px 8px; text-align:center; color:var(--text-2); font-size:13px; }
+</style>
+</head>
+<body>
+<div id="stars"></div>
+<h1 class="sr-only">英文單字飄浮卡片學習工具：12 張單字卡螺旋飄浮，點擊放大查看，並提供教師編輯介面輸入單字與圖片</h1>
+
+<div class="app">
+
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8"><rect x="3" y="3" width="9" height="9" rx="2"/><rect x="12" y="12" width="9" height="9" rx="2"/></svg>
+      </div>
+      <div class="brand-text">
+        <h1>圖卡抽卡</h1>
+        <p>點擊任一卡片，查看內容</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <span id="syncStatus">已同步</span>
+      <button class="lesson-pill" id="lessonBtn"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg><span class="lp-name" id="lessonName">未命名課程</span></button>
+      <div class="star-pill"><svg class="icon-svg" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg><span id="starCount">0</span></div>
+      <button class="icon-btn" id="editToggleBtn"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg> 教師編輯</button>
+    </div>
+  </div>
+
+  <div class="stage" id="stage">
+    <div class="stage-empty" id="stageEmpty" style="display:none;">
+      <svg class="icon-svg" style="width:30px;height:30px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+      <span>還沒有單字卡，點右上角「教師編輯」開始輸入</span>
+    </div>
+    <div class="hint">
+      <svg class="icon-svg" style="width:18px;height:18px;" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="12" cy="10" r="6"/><line x1="9" y1="20" x2="15" y2="20" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="9.5" y1="17" x2="14.5" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <div><b>小提示</b>點擊卡片查看詳細內容學習更有趣！</div>
+    </div>
+  </div>
+
+  <div class="deck-section">
+    <div class="deck-strip" id="deckStrip"></div>
+    <div class="viewer-wrap" id="viewerWrap"></div>
+    <div class="nav-arrow prev" id="prevBtn"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg></div>
+    <div class="nav-counter" id="navCounter">1 / 12</div>
+    <div class="nav-arrow next" id="nextBtn"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg></div>
+  </div>
+
+  <div class="bottombar">
+    <button class="end-btn" id="endBtn"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> 結束學習</button>
+    <div style="display:flex; gap:10px;">
+      <button class="icon-btn" id="shuffleBtn"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg> 洗牌</button>
+      <button class="icon-btn" id="autoPlayBtn"><svg class="icon-svg" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><polygon points="6 4 20 12 6 20 6 4"/></svg> 自動播放</button>
+      <button class="icon-btn" id="listBtn"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg> 查看列表</button>
+    </div>
+  </div>
+
+  <div class="bottombar" style="padding-top:0;">
+    <div></div>
+    <div class="progress-wrap">
+      <span class="progress-label">學習進度</span>
+      <div class="progress-track"><div class="progress-fill" id="progFill" style="width:0%"></div></div>
+      <span class="progress-pct" id="progPct">0%</span>
+    </div>
+  </div>
+
+</div>
+
+<div id="modalRoot"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const ICON_PATHS = {
+  'star': '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
+  'star-filled': '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="currentColor" stroke="currentColor"/>',
+  'edit': '<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>',
+  'photo': '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>',
+  'bulb': '<circle cx="12" cy="10" r="6" fill="currentColor" stroke="none"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="9.5" y1="17" x2="14.5" y2="17"/>',
+  'chevron-left': '<polyline points="15 18 9 12 15 6"/>',
+  'chevron-right': '<polyline points="9 18 15 12 9 6"/>',
+  'logout': '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
+  'list': '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>',
+  'volume': '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>',
+  'x': '<line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/>',
+  'upload': '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>',
+  'check': '<polyline points="20 6 9 17 4 12"/>',
+  'shuffle': '<polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/>',
+  'play': '<polygon points="6 4 20 12 6 20 6 4" fill="currentColor" stroke="none"/>',
+  'pause': '<rect x="6" y="4" width="4" height="16" fill="currentColor" stroke="none"/><rect x="14" y="4" width="4" height="16" fill="currentColor" stroke="none"/>',
+  'book': '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>',
+  'trash': '<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>',
+  'plus': '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
+};
+function icon(name){
+  const inner = ICON_PATHS[name] || '';
+  return `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inner}</svg>`;
+}
+
+/* ---------------- cloud persistence via Supabase (synced across devices) ---------------- */
+const SUPABASE_URL = 'https://xymeqfpxcjklbzseshgz.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_B1Zs46WTq0WqcvnkuIYO8g_jsjfSym7';
+const SUPABASE_TABLE = 'wordcards_data';
+const LS_PREFIX = 'wordcards_app:';
+
+function lsGet(key){
+  try{ return window.localStorage.getItem(LS_PREFIX + key); }catch(e){ return null; }
+}
+function lsSet(key, value){
+  try{ window.localStorage.setItem(LS_PREFIX + key, value); }catch(e){}
+}
+function lsDelete(key){
+  try{ window.localStorage.removeItem(LS_PREFIX + key); }catch(e){}
+}
+
+function setSyncStatus(status){
+  const el = document.getElementById('syncStatus');
+  if(!el) return;
+  if(status === 'syncing'){
+    el.textContent = '同步中…';
+    el.style.color = 'var(--text-2)';
+  }else if(status === 'error'){
+    el.textContent = '離線（已存在本機）';
+    el.style.color = 'var(--gold)';
+  }else{
+    el.textContent = '已同步';
+    el.style.color = 'var(--text-2)';
+  }
+}
+
+const cloudStore = {
+  async get(key){
+    // local cache first so UI can render instantly
+    const cached = lsGet(key);
+    try{
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE}?id=eq.${encodeURIComponent(key)}&select=payload`, {
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`,
+        }
+      });
+      if(!res.ok) throw new Error('fetch failed');
+      const rows = await res.json();
+      if(rows && rows.length){
+        const value = typeof rows[0].payload === 'string' ? rows[0].payload : JSON.stringify(rows[0].payload);
+        lsSet(key, value);
+        setSyncStatus('ok');
+        return { key, value };
+      }
+      if(cached !== null) return { key, value: cached };
+      return null;
+    }catch(e){
+      setSyncStatus('error');
+      if(cached !== null) return { key, value: cached };
+      return null;
+    }
+  },
+  async set(key, value){
+    lsSet(key, value);
+    setSyncStatus('syncing');
+    try{
+      let payload = value;
+      if(typeof value === 'string' && (value.startsWith('{') || value.startsWith('['))){
+        try{ payload = JSON.parse(value); }catch(e){ payload = value; }
+      }
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE}`, {
+        method: 'POST',
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'resolution=merge-duplicates',
+        },
+        body: JSON.stringify({ id: key, payload, updated_at: new Date().toISOString() })
+      });
+      if(!res.ok) throw new Error('save failed');
+      setSyncStatus('ok');
+      return { key, value };
+    }catch(e){
+      setSyncStatus('error');
+      return { key, value };
+    }
+  },
+  async delete(key){
+    lsDelete(key);
+    try{
+      await fetch(`${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE}?id=eq.${encodeURIComponent(key)}`, {
+        method: 'DELETE',
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`,
+        }
+      });
+      setSyncStatus('ok');
+      return { key, deleted:true };
+    }catch(e){
+      setSyncStatus('error');
+      return { key, deleted:true };
+    }
+  },
+  async list(prefix){
+    try{
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE}?id=like.${encodeURIComponent((prefix||'')+'*')}&select=id`, {
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`,
+        }
+      });
+      if(!res.ok) throw new Error('list failed');
+      const rows = await res.json();
+      return { keys: rows.map(r=>r.id) };
+    }catch(e){
+      return { keys: [] };
+    }
+  }
+};
+const localStore = cloudStore;
+
+const STORAGE_KEY = 'wordcards:deck:v1';
+const FAV_KEY = 'wordcards:favs:v1';
+const SEEN_KEY = 'wordcards:seen:v1';
+const LESSON_NAME_KEY = 'wordcards:lessonname:v1';
+const LESSON_LIST_KEY = 'wordcards:lessons:index:v1';
+const LESSON_PREFIX = 'wordcards:lesson:';
+
+const DEFAULT_CARDS = Array.from({length:12}, (_,i)=>({
+  word:'', phonetic:'', pos:'', def:'', img:''
+}));
+
+let state = {
+  cards: DEFAULT_CARDS.map(c=>({...c})),
+  favs: {},
+  seen: {},
+  activeIndex: null,
+  lessonName: '未命名課程',
+};
+
+let autoPlayTimer = null;
+let autoPlayOn = false;
+const AUTO_PLAY_INTERVAL = 5000;
+
+function deepCopy(o){ return JSON.parse(JSON.stringify(o)); }
+
+async function loadState(){
+  try{
+    const r = await localStore.get(STORAGE_KEY);
+    if(r && r.value){
+      const parsed = JSON.parse(r.value);
+      if(Array.isArray(parsed) && parsed.length){
+        state.cards = parsed;
+      }
+    }
+  }catch(e){}
+  try{
+    const f = await localStore.get(FAV_KEY);
+    if(f && f.value) state.favs = JSON.parse(f.value);
+  }catch(e){}
+  try{
+    const s = await localStore.get(SEEN_KEY);
+    if(s && s.value) state.seen = JSON.parse(s.value);
+  }catch(e){}
+  try{
+    const ln = await localStore.get(LESSON_NAME_KEY);
+    if(ln && ln.value) state.lessonName = ln.value;
+  }catch(e){}
+}
+
+async function saveCards(){
+  try{ await localStore.set(STORAGE_KEY, JSON.stringify(state.cards)); }catch(e){}
+}
+async function saveFavs(){
+  try{ await localStore.set(FAV_KEY, JSON.stringify(state.favs)); }catch(e){}
+}
+async function saveSeen(){
+  try{ await localStore.set(SEEN_KEY, JSON.stringify(state.seen)); }catch(e){}
+}
+async function saveLessonName(){
+  try{ await localStore.set(LESSON_NAME_KEY, state.lessonName); }catch(e){}
+}
+
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(()=>t.classList.remove('show'), 1800);
+}
+
+function speak(text){
+  if(!('speechSynthesis' in window) || !text) return;
+  window.speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'en-US';
+  u.rate = 0.92;
+  window.speechSynthesis.speak(u);
+}
+
+function validCards(){
+  return state.cards.map((c,i)=>({...c, _i:i})).filter(c=>c.word && c.word.trim());
+}
+
+/* ---------------- floating spiral stage ---------------- */
+function renderStage(){
+  const stage = document.getElementById('stage');
+  const empty = document.getElementById('stageEmpty');
+  Array.from(stage.querySelectorAll('.float-card')).forEach(el=>el.remove());
+
+  const cards = validCards();
+  empty.style.display = cards.length ? 'none' : 'flex';
+  if(!cards.length) return;
+
+  const w = stage.clientWidth;
+  const h = stage.clientHeight;
+  const n = cards.length;
+
+  cards.forEach((c, idx)=>{
+    const t = idx/(n-1 || 1);
+    const angle = t * Math.PI * 2.4;
+    const radiusX = w*0.30 * (1 - t*0.55);
+    const cx = w/2 + Math.cos(angle) * radiusX;
+    const cy = h * (0.12 + t*0.8);
+    const rot = (Math.sin(idx*1.7)*8).toFixed(1);
+
+    const el = document.createElement('div');
+    el.className = 'float-card';
+    el.style.left = (cx - 64) + 'px';
+    el.style.top = (cy - 80) + 'px';
+    el.style.setProperty('--rot', rot+'deg');
+    el.style.animationDelay = (idx*0.35)+'s';
+    el.style.zIndex = 10+idx;
+    el.dataset.idx = c._i;
+
+    const imgHtml = c.img
+      ? `<img class="fc-img" src="${escapeAttr(c.img)}" alt="">`
+      : `<div class="fc-img placeholder">${icon('photo')}</div>`;
+
+    el.innerHTML = `${imgHtml}<div class="fc-label">${escapeHtml(c.word)}</div>`;
+    el.addEventListener('click', ()=>{ stopAutoPlay(); openCard(c._i); });
+    stage.appendChild(el);
+  });
+
+  markSelected();
+}
+
+function markSelected(){
+  document.querySelectorAll('.float-card').forEach(el=>{
+    el.classList.toggle('selected', Number(el.dataset.idx) === state.activeIndex);
+  });
+}
+
+function escapeHtml(s){
+  return String(s||'').replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+function escapeAttr(s){ return escapeHtml(s); }
+
+/* ---------------- deck strip + center viewer ---------------- */
+function renderDeck(){
+  const strip = document.getElementById('deckStrip');
+  const viewerWrap = document.getElementById('viewerWrap');
+  const counter = document.getElementById('navCounter');
+  strip.innerHTML = '';
+  viewerWrap.innerHTML = '';
+
+  const cards = validCards();
+  if(!cards.length){
+    counter.textContent = '0 / 0';
+    updateProgress();
+    return;
+  }
+
+  if(state.activeIndex === null || !cards.find(c=>c._i===state.activeIndex)){
+    state.activeIndex = cards[0]._i;
+  }
+
+  const activePos = cards.findIndex(c=>c._i===state.activeIndex);
+  counter.textContent = `${activePos+1} / ${cards.length}`;
+
+  cards.forEach((c, pos)=>{
+    const card = document.createElement('div');
+    const dist = Math.abs(pos - activePos);
+    card.className = 'strip-card' + (pos===activePos ? ' center-active' : dist===1 ? ' near' : '');
+    card.innerHTML = c.img
+      ? `<img src="${escapeAttr(c.img)}" alt=""><div class="sc-label">${escapeHtml(c.word)}</div>`
+      : `<div class="sc-placeholder">${icon('photo')}</div><div class="sc-label">${escapeHtml(c.word)}</div>`;
+    card.addEventListener('click', ()=>{ stopAutoPlay(); openCard(c._i); });
+    strip.appendChild(card);
+  });
+
+  const active = state.cards[state.activeIndex];
+  const isFav = !!state.favs[state.activeIndex];
+  const card = document.createElement('div');
+  card.className = 'viewer-card';
+  card.innerHTML = `
+    <div class="viewer-imgwrap">
+      ${active.img ? `<img src="${escapeAttr(active.img)}" alt="">` : `<div class="vi-placeholder">${icon('photo')}</div>`}
+      <div class="vi-speak" id="speakBtn" role="button" aria-label="播放發音">${icon('volume')}</div>
+      <div class="vi-close" id="closeBtn" role="button" aria-label="關閉">${icon('x')}</div>
+    </div>
+    <div class="viewer-body">
+      <p class="vb-word">${escapeHtml(active.word)}</p>
+      <div class="vb-meta">
+        ${active.phonetic ? `<span class="vb-phon">/${escapeHtml(active.phonetic)}/</span>` : ''}
+        ${active.pos ? `<span class="vb-pos">${escapeHtml(active.pos)}</span>` : ''}
+      </div>
+      <p class="vb-def">${escapeHtml(active.def) || '尚未填寫中文解釋。'}</p>
+      <div class="vb-actions">
+        <button class="vb-btn primary" id="playBtn">${icon('volume')} 播放發音</button>
+        <button class="vb-btn ghost${isFav?' faved':''}" id="favBtn">${icon(isFav?'star-filled':'star')} ${isFav?'已收藏':'加入收藏'}</button>
+      </div>
+    </div>
+  `;
+  viewerWrap.appendChild(card);
+
+  card.querySelector('#speakBtn').addEventListener('click', ()=>speak(active.word));
+  card.querySelector('#playBtn').addEventListener('click', ()=>speak(active.word));
+  card.querySelector('#closeBtn').addEventListener('click', ()=>{ stopAutoPlay(); closeCard(); });
+  card.querySelector('#favBtn').addEventListener('click', ()=>toggleFav(state.activeIndex));
+
+  markSelected();
+}
+
+function openCard(i, opts){
+  opts = opts || {};
+  state.activeIndex = i;
+  if(!state.seen[i]){
+    state.seen[i] = true;
+    saveSeen();
+  }
+  renderDeck();
+  markSelected();
+  updateProgress();
+  if(opts.speakIt !== false){
+    speak(state.cards[i].word);
+  }
+  if(autoPlayOn && !opts._fromAutoPlay){
+    clearInterval(autoPlayTimer);
+    autoPlayTimer = setInterval(()=>{ stepCard(1, {_fromAutoPlay:true}); }, AUTO_PLAY_INTERVAL);
+  }
+}
+function closeCard(){
+  // keep activeIndex but no special "closed" state needed; just re-render for visual feedback
+  renderDeck();
+}
+
+function stepCard(delta, opts){
+  const cards = validCards();
+  if(!cards.length) return;
+  const pos = cards.findIndex(c=>c._i===state.activeIndex);
+  let next = pos + delta;
+  if(next < 0) next = cards.length-1;
+  if(next >= cards.length) next = 0;
+  openCard(cards[next]._i, opts);
+}
+
+function shuffleCards(){
+  const cards = validCards();
+  if(cards.length < 2) return;
+  const order = cards.map(c=>state.cards[c._i]);
+  for(let i=order.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [order[i],order[j]] = [order[j],order[i]];
+  }
+  const blanks = state.cards.filter(c=>!c.word || !c.word.trim());
+  state.cards = [...order, ...blanks];
+  state.activeIndex = null;
+  saveCards();
+  renderAll();
+  showToast('已洗牌');
+}
+
+function startAutoPlay(){
+  const cards = validCards();
+  if(cards.length < 2){
+    showToast('至少需要 2 張單字卡才能自動播放');
+    return;
+  }
+  autoPlayOn = true;
+  document.getElementById('autoPlayBtn').classList.add('playing');
+  document.getElementById('autoPlayBtn').innerHTML = icon('pause') + ' 停止播放';
+  if(state.activeIndex === null) openCard(cards[0]._i);
+  clearInterval(autoPlayTimer);
+  autoPlayTimer = setInterval(()=>{ stepCard(1, {_fromAutoPlay:true}); }, AUTO_PLAY_INTERVAL);
+}
+function stopAutoPlay(){
+  autoPlayOn = false;
+  clearInterval(autoPlayTimer);
+  autoPlayTimer = null;
+  const btn = document.getElementById('autoPlayBtn');
+  if(btn){
+    btn.classList.remove('playing');
+    btn.innerHTML = icon('play') + ' 自動播放';
+  }
+}
+function toggleAutoPlay(){
+  if(autoPlayOn) stopAutoPlay(); else startAutoPlay();
+}
+
+function toggleFav(i){
+  state.favs[i] = !state.favs[i];
+  if(!state.favs[i]) delete state.favs[i];
+  saveFavs();
+  updateStarCount();
+  renderDeck();
+}
+
+function updateStarCount(){
+  document.getElementById('starCount').textContent = Object.keys(state.favs).length;
+}
+
+function updateProgress(){
+  const cards = validCards();
+  const total = cards.length;
+  const seenCount = cards.filter(c=>state.seen[c._i]).length;
+  const pct = total ? Math.round((seenCount/total)*100) : 0;
+  document.getElementById('progFill').style.width = pct+'%';
+  document.getElementById('progPct').textContent = pct+'%';
+}
+
+/* ---------------- list modal ---------------- */
+function openListModal(){
+  const root = document.getElementById('modalRoot');
+  const cards = validCards();
+  const rows = cards.map(c=>`
+    <div class="modal-row" data-idx="${c._i}">
+      ${c.img ? `<img src="${escapeAttr(c.img)}" alt="">` : `<div class="mr-ph">${icon('photo')}</div>`}
+      <div>
+        <div class="mr-word">${escapeHtml(c.word)}</div>
+        <div class="mr-def">${escapeHtml(c.def)||''}</div>
+      </div>
+      <div class="mr-idx">${c._i+1}</div>
+    </div>
+  `).join('') || `<div style="padding:30px;text-align:center;color:var(--text-2);font-size:13px;">尚無單字卡</div>`;
+
+  root.innerHTML = `
+    <div class="modal-overlay" id="listOverlay">
+      <div class="modal-card">
+        <div class="modal-head">
+          <h3>單字列表</h3>
+          <button class="icon-btn" id="closeListBtn">${icon('x')}</button>
+        </div>
+        <div class="modal-list">${rows}</div>
+      </div>
+    </div>
+  `;
+  document.getElementById('listOverlay').addEventListener('click', (e)=>{
+    if(e.target.id === 'listOverlay') root.innerHTML='';
+  });
+  document.getElementById('closeListBtn').addEventListener('click', ()=> root.innerHTML='');
+  root.querySelectorAll('.modal-row').forEach(r=>{
+    r.addEventListener('click', ()=>{
+      stopAutoPlay();
+      openCard(Number(r.dataset.idx));
+      root.innerHTML='';
+    });
+  });
+}
+
+/* ---------------- lesson (course) management ---------------- */
+async function getLessonIndex(){
+  try{
+    const r = await localStore.get(LESSON_LIST_KEY);
+    if(r && r.value) return JSON.parse(r.value);
+  }catch(e){}
+  return [];
+}
+async function saveLessonIndex(list){
+  try{ await localStore.set(LESSON_LIST_KEY, JSON.stringify(list)); }catch(e){}
+}
+function slugifyLessonId(name){
+  return 'lesson_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
+}
+
+function openLessonModal(){
+  const root = document.getElementById('modalRoot');
+  root.innerHTML = `
+    <div class="modal-overlay" id="lessonOverlay">
+      <div class="modal-card">
+        <div class="modal-head">
+          <h3>課程管理</h3>
+          <button class="icon-btn" id="closeLessonBtn">${icon('x')}</button>
+        </div>
+        <div class="lesson-modal-body">
+          <div class="lesson-name-row">
+            <input class="ec-input" id="lessonNameInput" placeholder="課程名稱 (例如：動物、水果)" value="${escapeAttr(state.lessonName)}">
+          </div>
+          <div class="lesson-save-row">
+            <button class="btn" id="newLessonBtn">${icon('plus')} 新增空白課程</button>
+            <button class="btn primary" id="saveLessonBtn">${icon('check')} 將目前 12 張卡存成課程</button>
+          </div>
+          <p class="lesson-list-title">已儲存的課程</p>
+          <div id="lessonListWrap"><div class="lesson-empty">載入中…</div></div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('lessonOverlay').addEventListener('click', (e)=>{
+    if(e.target.id === 'lessonOverlay') root.innerHTML='';
+  });
+  document.getElementById('closeLessonBtn').addEventListener('click', ()=> root.innerHTML='');
+  document.getElementById('lessonNameInput').addEventListener('input', (e)=>{
+    state.lessonName = e.target.value;
+  });
+  document.getElementById('newLessonBtn').addEventListener('click', async ()=>{
+    const ok = window.confirm('要新增一個空白課程嗎？\n如果目前這 12 張卡還沒有存成課程，內容將會被清空，請先確認已經存檔。');
+    if(!ok) return;
+    state.cards = Array.from({length:12}, ()=>({word:'', phonetic:'', pos:'', def:'', img:''}));
+    state.lessonName = '未命名課程';
+    state.activeIndex = null;
+    state.seen = {};
+    await saveCards();
+    await saveSeen();
+    await saveLessonName();
+    root.innerHTML = '';
+    renderAll();
+    showToast('已建立空白課程，開始輸入新單字吧');
+    setTimeout(openEditPanel, 300);
+  });
+  document.getElementById('saveLessonBtn').addEventListener('click', async ()=>{
+    const name = (document.getElementById('lessonNameInput').value || '').trim() || '未命名課程';
+    state.lessonName = name;
+    await saveLessonName();
+    document.getElementById('lessonName').textContent = name;
+
+    const list = await getLessonIndex();
+    const existing = list.find(l=>l.name === name);
+    const id = existing ? existing.id : slugifyLessonId(name);
+    try{
+      await localStore.set(LESSON_PREFIX + id, JSON.stringify({ name, cards: state.cards }));
+      const newList = existing
+        ? list.map(l=> l.id===id ? {...l, savedAt: Date.now(), count: validCards().length} : l)
+        : [...list, { id, name, savedAt: Date.now(), count: validCards().length }];
+      await saveLessonIndex(newList);
+      showToast(existing ? '已更新課程「'+name+'」' : '已存成課程「'+name+'」');
+      renderLessonList(newList);
+    }catch(e){
+      showToast('儲存課程失敗，請再試一次');
+    }
+  });
+
+  (async ()=>{
+    const list = await getLessonIndex();
+    renderLessonList(list);
+  })();
+}
+
+function renderLessonList(list){
+  const wrap = document.getElementById('lessonListWrap');
+  if(!wrap) return;
+  if(!list.length){
+    wrap.innerHTML = `<div class="lesson-empty">還沒有儲存任何課程</div>`;
+    return;
+  }
+  const sorted = [...list].sort((a,b)=> (b.savedAt||0)-(a.savedAt||0));
+  wrap.innerHTML = sorted.map(l=>`
+    <div class="lesson-row" data-id="${escapeAttr(l.id)}">
+      <div class="lesson-row-icon">${icon('book')}</div>
+      <div class="lesson-row-main">
+        <div class="lesson-row-name">${escapeHtml(l.name)}</div>
+        <div class="lesson-row-meta">${l.count||0} 張單字卡 · ${l.savedAt ? new Date(l.savedAt).toLocaleDateString('zh-TW') : ''}</div>
+      </div>
+      <button class="lesson-row-del" data-id="${escapeAttr(l.id)}" aria-label="刪除課程">${icon('trash')}</button>
+    </div>
+  `).join('');
+
+  wrap.querySelectorAll('.lesson-row').forEach(row=>{
+    row.addEventListener('click', async (e)=>{
+      if(e.target.closest('.lesson-row-del')) return;
+      const id = row.dataset.id;
+      try{
+        const r = await localStore.get(LESSON_PREFIX + id);
+        if(r && r.value){
+          const data = JSON.parse(r.value);
+          state.cards = data.cards;
+          state.lessonName = data.name;
+          state.activeIndex = null;
+          state.seen = {};
+          await saveCards();
+          await saveSeen();
+          await saveLessonName();
+          document.getElementById('modalRoot').innerHTML = '';
+          renderAll();
+          showToast('已載入課程「'+data.name+'」');
+        }
+      }catch(e){
+        showToast('載入課程失敗');
+      }
+    });
+  });
+
+  wrap.querySelectorAll('.lesson-row-del').forEach(btn=>{
+    btn.addEventListener('click', async (e)=>{
+      e.stopPropagation();
+      const id = btn.dataset.id;
+      const list2 = await getLessonIndex();
+      const target = list2.find(l=>l.id===id);
+      const newList = list2.filter(l=>l.id!==id);
+      try{ await localStore.delete(LESSON_PREFIX + id); }catch(err){}
+      await saveLessonIndex(newList);
+      renderLessonList(newList);
+      showToast(target ? '已刪除課程「'+target.name+'」' : '已刪除課程');
+    });
+  });
+}
+
+/* ---------------- teacher edit panel ---------------- */
+function openEditPanel(){
+  const root = document.getElementById('modalRoot');
+  const draft = deepCopy(state.cards);
+
+  const fieldsHtml = draft.map((c,i)=>`
+    <div class="edit-card" data-i="${i}">
+      <span class="ec-num">第 ${i+1} 張</span>
+      <div class="ec-top">
+        <div class="ec-thumb" id="thumb-${i}">
+          ${c.img ? `<img src="${escapeAttr(c.img)}" alt="">` : icon('upload')}
+          <input type="file" accept="image/*" data-i="${i}" class="img-file-input">
+        </div>
+        <div class="ec-fields">
+          <input class="ec-input word-input" data-i="${i}" placeholder="英文單字 (例如 Butterfly)" value="${escapeAttr(c.word)}">
+          <div class="ec-row2">
+            <input class="ec-input small phon-input" data-i="${i}" placeholder="音標 (選填)" value="${escapeAttr(c.phonetic)}">
+            <input class="ec-input small pos-input" data-i="${i}" placeholder="詞性 (例如 名詞)" value="${escapeAttr(c.pos)}">
+          </div>
+        </div>
+      </div>
+      <input class="ec-input def-input" data-i="${i}" placeholder="中文解釋" value="${escapeAttr(c.def)}">
+      <div class="ec-imgurl">
+        <input class="ec-input small imgurl-input" data-i="${i}" placeholder="或貼上圖片網址 https://..." value="${(c.img && !c.img.startsWith('data:')) ? escapeAttr(c.img) : ''}">
+      </div>
+      <button class="ec-clear" data-i="${i}">清空這張</button>
+    </div>
+  `).join('');
+
+  root.innerHTML = `
+    <div class="edit-overlay" id="editOverlay">
+      <div class="edit-wrap">
+        <div class="edit-head">
+          <h2>教師編輯 — 12 張單字卡</h2>
+          <button class="icon-btn" id="closeEditBtn">${icon('x')} 關閉</button>
+        </div>
+        <p class="edit-sub">輸入單字、音標、詞性、中文解釋，並貼上圖片網址或從電腦上傳圖片。留空的卡片不會顯示在飄浮畫面中。</p>
+        <div class="edit-grid">${fieldsHtml}</div>
+        <div class="edit-footer">
+          <button class="btn" id="cancelEditBtn">取消</button>
+          <button class="btn primary" id="saveEditBtn">${icon('check')} 儲存並套用</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const overlay = document.getElementById('editOverlay');
+
+  function setField(i, key, val){ draft[i][key] = val; }
+
+  overlay.querySelectorAll('.word-input').forEach(inp=>{
+    inp.addEventListener('input', ()=> setField(Number(inp.dataset.i),'word',inp.value));
+  });
+  overlay.querySelectorAll('.phon-input').forEach(inp=>{
+    inp.addEventListener('input', ()=> setField(Number(inp.dataset.i),'phonetic',inp.value));
+  });
+  overlay.querySelectorAll('.pos-input').forEach(inp=>{
+    inp.addEventListener('input', ()=> setField(Number(inp.dataset.i),'pos',inp.value));
+  });
+  overlay.querySelectorAll('.def-input').forEach(inp=>{
+    inp.addEventListener('input', ()=> setField(Number(inp.dataset.i),'def',inp.value));
+  });
+  overlay.querySelectorAll('.imgurl-input').forEach(inp=>{
+    inp.addEventListener('input', ()=>{
+      const i = Number(inp.dataset.i);
+      setField(i,'img',inp.value.trim());
+      updateThumb(i, inp.value.trim());
+    });
+  });
+  overlay.querySelectorAll('.img-file-input').forEach(inp=>{
+    inp.addEventListener('change', (e)=>{
+      const i = Number(inp.dataset.i);
+      const file = e.target.files[0];
+      if(!file) return;
+      if(file.size > 4*1024*1024){
+        showToast('圖片太大，請選擇 4MB 以下的檔案');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = ()=>{
+        setField(i,'img',reader.result);
+        const urlInput = overlay.querySelector(`.imgurl-input[data-i="${i}"]`);
+        if(urlInput) urlInput.value = '';
+        updateThumb(i, reader.result);
+      };
+      reader.readAsDataURL(file);
+    });
+  });
+  overlay.querySelectorAll('.ec-clear').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const i = Number(btn.dataset.i);
+      draft[i] = {word:'',phonetic:'',pos:'',def:'',img:''};
+      const wrap = overlay.querySelector(`.edit-card[data-i="${i}"]`);
+      wrap.querySelector('.word-input').value='';
+      wrap.querySelector('.phon-input').value='';
+      wrap.querySelector('.pos-input').value='';
+      wrap.querySelector('.def-input').value='';
+      wrap.querySelector('.imgurl-input').value='';
+      updateThumb(i,'');
+    });
+  });
+
+  function updateThumb(i, src){
+    const t = overlay.querySelector(`#thumb-${i}`);
+    const fileInput = t.querySelector('input[type=file]');
+    if(src){
+      t.innerHTML = `<img src="${escapeAttr(src)}" alt="">`;
+    }else{
+      t.innerHTML = icon('upload');
+    }
+    t.appendChild(fileInput);
+  }
+
+  function closeOverlay(){ root.innerHTML=''; }
+  document.getElementById('closeEditBtn').addEventListener('click', closeOverlay);
+  document.getElementById('cancelEditBtn').addEventListener('click', closeOverlay);
+  document.getElementById('saveEditBtn').addEventListener('click', async ()=>{
+    stopAutoPlay();
+    state.cards = draft.map(c=>({
+      word:(c.word||'').trim(),
+      phonetic:(c.phonetic||'').trim(),
+      pos:(c.pos||'').trim(),
+      def:(c.def||'').trim(),
+      img:(c.img||'').trim(),
+    }));
+    state.activeIndex = null;
+    await saveCards();
+    closeOverlay();
+    renderAll();
+    showToast('已儲存單字卡');
+  });
+}
+
+/* ---------------- wiring ---------------- */
+function renderAll(){
+  renderStage();
+  renderDeck();
+  updateStarCount();
+  updateProgress();
+  const lessonNameEl = document.getElementById('lessonName');
+  if(lessonNameEl) lessonNameEl.textContent = state.lessonName || '未命名課程';
+}
+
+document.getElementById('editToggleBtn').addEventListener('click', ()=>{ stopAutoPlay(); openEditPanel(); });
+document.getElementById('listBtn').addEventListener('click', ()=>{ stopAutoPlay(); openListModal(); });
+document.getElementById('prevBtn').addEventListener('click', ()=>{ stopAutoPlay(); stepCard(-1); });
+document.getElementById('nextBtn').addEventListener('click', ()=>{ stopAutoPlay(); stepCard(1); });
+document.getElementById('shuffleBtn').addEventListener('click', ()=>{ stopAutoPlay(); shuffleCards(); });
+document.getElementById('autoPlayBtn').addEventListener('click', toggleAutoPlay);
+document.getElementById('lessonBtn').addEventListener('click', ()=>{ stopAutoPlay(); openLessonModal(); });
+document.getElementById('endBtn').addEventListener('click', ()=>{
+  stopAutoPlay();
+  showToast('已結束本次學習');
+});
+
+window.addEventListener('resize', ()=>{ renderStage(); });
+
+(async function init(){
+  await loadState();
+  renderAll();
+  if(!validCards().length){
+    setTimeout(openEditPanel, 300);
+  }
+})();
+</script>
+</body>
+</html>
