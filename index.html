@@ -523,7 +523,11 @@ const cloudStore = {
           'Authorization': `Bearer ${SUPABASE_KEY}`,
         }
       });
-      if(!res.ok) throw new Error('fetch failed');
+      if(!res.ok){
+        const errText = await res.text().catch(()=> '');
+        console.error('Supabase GET failed', key, res.status, errText);
+        throw new Error('fetch failed: ' + res.status);
+      }
       const rows = await res.json();
       if(rows && rows.length){
         const value = typeof rows[0].payload === 'string' ? rows[0].payload : JSON.stringify(rows[0].payload);
@@ -531,9 +535,12 @@ const cloudStore = {
         setSyncStatus('ok');
         return { key, value };
       }
+      // no row in cloud for this key
+      setSyncStatus('ok');
       if(cached !== null) return { key, value: cached };
       return null;
     }catch(e){
+      console.error('cloudStore.get error', key, e);
       setSyncStatus('error');
       if(cached !== null) return { key, value: cached };
       return null;
@@ -557,12 +564,17 @@ const cloudStore = {
         },
         body: JSON.stringify({ id: key, payload, updated_at: new Date().toISOString() })
       });
-      if(!res.ok) throw new Error('save failed');
+      if(!res.ok){
+        const errText = await res.text().catch(()=> '');
+        console.error('Supabase SET failed', key, res.status, errText);
+        throw new Error('save failed: ' + res.status);
+      }
       setSyncStatus('ok');
-      return { key, value };
+      return { key, value, synced:true };
     }catch(e){
+      console.error('cloudStore.set error', key, e);
       setSyncStatus('error');
-      return { key, value };
+      return { key, value, synced:false, error: e.message };
     }
   },
   async delete(key){
@@ -1010,14 +1022,19 @@ function openLessonModal(){
     const existing = list.find(l=>l.name === name);
     const id = existing ? existing.id : slugifyLessonId(name);
     try{
-      await localStore.set(LESSON_PREFIX + id, JSON.stringify({ name, cards: state.cards }));
+      const result = await localStore.set(LESSON_PREFIX + id, JSON.stringify({ name, cards: state.cards }));
       const newList = existing
         ? list.map(l=> l.id===id ? {...l, savedAt: Date.now(), count: validCards().length} : l)
         : [...list, { id, name, savedAt: Date.now(), count: validCards().length }];
       await saveLessonIndex(newList);
-      showToast(existing ? '已更新課程「'+name+'」' : '已存成課程「'+name+'」');
+      if(result && result.synced === false){
+        showToast('已存在本機，但雲端同步失敗，請檢查網路後重試');
+      }else{
+        showToast(existing ? '已更新課程「'+name+'」' : '已存成課程「'+name+'」');
+      }
       renderLessonList(newList);
     }catch(e){
+      console.error('save lesson failed', e);
       showToast('儲存課程失敗，請再試一次');
     }
   });
@@ -1051,6 +1068,7 @@ function renderLessonList(list){
     row.addEventListener('click', async (e)=>{
       if(e.target.closest('.lesson-row-del')) return;
       const id = row.dataset.id;
+      showToast('載入中…');
       try{
         const r = await localStore.get(LESSON_PREFIX + id);
         if(r && r.value){
@@ -1065,9 +1083,12 @@ function renderLessonList(list){
           document.getElementById('modalRoot').innerHTML = '';
           renderAll();
           showToast('已載入課程「'+data.name+'」');
+        }else{
+          showToast('找不到這個課程的內容，可能是舊資料，建議刪除後重新存一次');
         }
       }catch(e){
-        showToast('載入課程失敗');
+        console.error('load lesson failed', e);
+        showToast('載入課程失敗：' + (e.message||'未知錯誤'));
       }
     });
   });
